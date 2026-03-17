@@ -112,7 +112,118 @@
       --output-dir data/manifests \
       --train-split 0.9
 
+## Запуск обучения ##
+
+Это был технически самый тяжелый этап для меня. Подробнее расскажу на этапе сложностей, с которыми столкнулась.
+
+### Конфигурация Hydra ###
+Файл: configs/dset/audio/musiccaps_ft.yaml
+   
+    datasource:
+      max_sample_rate: 44100
+      max_channels: 2
+      train: egs/musiccaps/train
+      valid: egs/musiccaps/valid
+      evaluate: egs/musiccaps/valid
+      generate: egs/musiccaps/valid
+
+      # @package _global_
+      
+Файл: configs/experiment/musiccaps_train.yaml
+
+      
+    defaults:
+      - /lm: musicgen_lm
+      - /conditioner: text2music
+      - _self_
+    
+    # Датасет
+    dset: audio/musiccaps_ft
+    
+    dataset:
+      batch_size: 1
+      num_workers: 0
+      segment_duration: 10
+      return_info: true
+      train:
+        num_samples: 3064
+      valid:
+        num_samples: 306
+    
+    # Оптимизатор
+    optimizer:
+      lr: 8e-6
+      betas: [0.9, 0.999]
+      weight_decay: 0.01
+    
+    # Параметры обучения
+    training_epochs: 16
+    updates_per_epoch: 3064
+    evaluate:
+      every: 4
+    generate:
+      every: 4
+    
+    # Устройство
+    device: cpu
+    fp16: false
+    
+    # Conditioner
+    conditioner:
+      text:
+        merge_text_p: 0.25
+        drop_desc_p: 0.5
+        drop_other_p: 0.5
+        text_attributes: [genre_tags, general_mood, lead_instrument, 
+                          accompaniment, tempo_and_rhythm, vocal_presence, 
+                          production_quality]
+
       
 
-
     
+## Запуск обучения ##
+
+    AUDIOCRAFT_DORA_DIR=$(pwd)/../outputs \
+    dora --package audiocraft --main_module train run --clear \
+      solver=musicgen/musicgen_base_32khz \
+      dset=audio/musiccaps_ft \
+      conditioner=text2music \
+      datasource.train=$(pwd)/../egs/musiccaps/train/data.jsonl.gz \
+      datasource.valid=$(pwd)/../egs/musiccaps/valid/data.jsonl.gz \
+      datasource.evaluate=$(pwd)/../egs/musiccaps/valid/data.jsonl.gz \
+      datasource.generate=$(pwd)/../egs/musiccaps/valid/data.jsonl.gz \
+      datasource.max_sample_rate=44100 \
+      datasource.max_channels=2 \
+      +dataset.info_fields_required=false \
+      dataset.segment_duration=10 \
+      dataset.batch_size=1 \
+      dataset.num_workers=0 \
+      dataset.train.num_samples=3064 \
+      dataset.valid.num_samples=306 \
+      optim.updates_per_epoch=3064 \
+      optim.epochs=16 \
+      evaluate.every=4 \
+      generate.every=4 \
+      device=cpu \
+      autocast=false \
+      transformer_lm.memory_efficient=false \
+      +conditioners.description.t5.autocast_dtype=null \
+      optim.ema.device=cpu
+
+## Генерация музыки ##
+
+Скрипт загружает обученную модель и генерирует 5 треков по заданным промптам.
+
+    python src/generate.py \
+      --checkpoint outputs/xps/7a2d19bc/checkpoint.th \
+      --output-dir generated \
+      --duration 10
+
+## Трудности в процессе выполнения ###
+
+1. Во-первых, вес .waw файлов достаточно высокий, поэтому, когда появилась необходимость перенести уже обработанные данные перед обучение на другое устройство, размер датасета составил около 200 гб. Но переведя данные в формат .mp3 удалось решить данную проблему.
+2. Самым сложным оказался процесс обучения данной модели, так как сборка AudioCraft достаточно избирательна и требовала тонкой настройки. Ввиду этого собрать библиотеки, требуемые для обучения на GPU оказалось достаточно сложной проблемой, поэтому было решено перенести все данные на macOS. Когда все библиотеки наконец были собраны и не конфликтовали друг с другом, возникли сложности с обучением на MPS. К сожалению, поэтому пришлось провести обучение на CPU. Это, в свою очередь, послужило причиной для медленного обучения модели, поэтому к моменту отправки ДЗ результаты обучения и генерации неутешительны.
+
+Выводы:
+1. Проверять вес данных и в случае необходимости своевременно найти альтернативу формату данных.
+2. Тонкая настройка конфигурации и требуемых библиотек при обучении модели - очень важный момент, к которому стоит относиться с большей ответственностью.
