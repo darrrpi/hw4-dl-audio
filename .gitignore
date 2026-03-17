@@ -1,0 +1,30 @@
+# Виртуальное окружение
+.venv/
+venv/
+env/
+ENV/
+audiocraft/.venv/
+audiocraft/venv/
+# Кэш Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+wandb/
